@@ -1,0 +1,51 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Excel files
+*.xlsx
+excel_files/
+
+# Logs
+*.log
+logs/
+
+# Environment files
+.env
+.env.local
+
+# Documentation
+README.md
+
+# Temporary files
+*.tmp
+*.bak
+
+
+
+

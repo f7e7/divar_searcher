@@ -1,0 +1,53 @@
+services:
+  divar-bot:
+    build: .
+    container_name: divar-search-bot
+    restart: unless-stopped
+
+    # Load environment variables from .env file
+    env_file:
+      - .env
+
+    # Environment variables with defaults
+    environment:
+      - BOT_TOKEN=${BOT_TOKEN:-339714541:AAEZBfuN3mFArGHkRT4VVrW4-6es-N6vKrw}
+      - MAX_RESULTS=${MAX_RESULTS:-50}
+      - REQUEST_TIMEOUT=${REQUEST_TIMEOUT:-10}
+      - TZ=${TZ:-UTC}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_FILE=${LOG_FILE:-/app/logs/bot.log}
+      - CHROME_HEADLESS=${CHROME_HEADLESS:-true}
+      - CHROME_OPTIONS=${CHROME_OPTIONS:---no-sandbox,--disable-dev-shm-usage,--disable-gpu}
+
+    # Volume mounts for persistent data
+    volumes:
+      - ./excel_files:/app/excel_files
+      - ./logs:/app/logs
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    # Resource limits (optional)
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 256M
+
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# Optional: Add a network for isolation
+networks:
+  default:
+    name: divar-bot-network
