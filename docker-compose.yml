@@ -10,7 +10,7 @@ services:
 
     # Environment variables with defaults
     environment:
-      - BOT_TOKEN=${BOT_TOKEN:-339714541:AAEZBfuN3mFArGHkRT4VVrW4-6es-N6vKrw}
+      # - BOT_TOKEN=${BOT_TOKEN:-339714541:AAEZBfuN3mFArGHkRT4VVrW4-6es-N6vKrw}
       - MAX_RESULTS=${MAX_RESULTS:-50}
       - REQUEST_TIMEOUT=${REQUEST_TIMEOUT:-10}
       - TZ=${TZ:-UTC}
@@ -19,8 +19,9 @@ services:
       - CHROME_HEADLESS=${CHROME_HEADLESS:-true}
       - CHROME_OPTIONS=${CHROME_OPTIONS:---no-sandbox,--disable-dev-shm-usage,--disable-gpu}
 
-    # Volume mounts for persistent data
+    # Volume mounts for persistent data and source code
     volumes:
+      - .:/app
       - ./excel_files:/app/excel_files
       - ./logs:/app/logs
 

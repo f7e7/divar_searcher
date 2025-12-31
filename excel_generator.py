@@ -19,25 +19,68 @@ class ExcelGenerator:
             timestamp=timestamp
         )
 
+        # Filter and clean data
+        filtered_data = self._filter_and_clean_data(data)
+
+        # If no data after filtering, return None
+        if not filtered_data:
+            print("No valid data found after filtering")
+            return None
+
         # Create workbook and worksheet
         self.workbook = openpyxl.Workbook()
         self.worksheet = self.workbook.active
         self.worksheet.title = "Divar Search Results"
 
         # Add headers
-        headers = ['Title', 'Description', 'Price', 'Phone Number', 'URL']
+        headers = ['Title', 'Description', 'Price', 'URL']
         self._add_headers(headers)
 
         # Add data
-        self._add_data(data)
+        self._add_data(filtered_data)
 
         # Auto-adjust column widths
         self._adjust_column_widths()
 
-        # Save file
-        self.workbook.save(filename)
+        # Ensure excel_files directory exists
+        excel_dir = "excel_files"
+        os.makedirs(excel_dir, exist_ok=True)
 
-        return filename
+        # Save file to excel_files directory
+        filepath = os.path.join(excel_dir, filename)
+        self.workbook.save(filepath)
+
+        print(f"Excel file created: {filepath} with {len(filtered_data)} records")
+        return filepath
+
+    def _filter_and_clean_data(self, data):
+        """
+        Filter out invalid entries and remove duplicates
+        """
+        filtered_data = []
+        seen_urls = set()
+
+        for item in data:
+            title = item.get('title', '').strip()
+            url = item.get('url', '').strip()
+
+            # Skip items without title or with placeholder titles
+            if not title or title.lower() in ['no title', 'بدون عنوان', '']:
+                continue
+
+            # Skip items without URL
+            if not url:
+                continue
+
+            # Skip duplicates based on URL (more reliable than title)
+            if url in seen_urls:
+                continue
+
+            # Add to filtered data and mark as seen
+            filtered_data.append(item)
+            seen_urls.add(url)
+
+        return filtered_data
 
     def _add_headers(self, headers):
         """
@@ -76,13 +119,8 @@ class ExcelGenerator:
             cell.value = item.get('price', '')
             cell.alignment = alignment
 
-            # Phone Number
-            cell = self.worksheet.cell(row=row_num, column=4)
-            cell.value = item.get('phone_number', '')
-            cell.alignment = alignment
-
             # URL
-            cell = self.worksheet.cell(row=row_num, column=5)
+            cell = self.worksheet.cell(row=row_num, column=4)
             cell.value = item.get('url', '')
             cell.alignment = alignment
 
@@ -121,6 +159,7 @@ class ExcelGenerator:
                         print(f"Cleaned up old file: {filename}")
                     except Exception as e:
                         print(f"Error removing {filename}: {e}")
+
 
 
 

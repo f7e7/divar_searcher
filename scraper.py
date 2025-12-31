@@ -22,31 +22,33 @@ class DivarScraper:
             'Upgrade-Insecure-Requests': '1',
         })
 
-    def search_divar(self, search_term, max_results=config.MAX_RESULTS):
+    def search_divar(self, search_term, max_results=config.MAX_RESULTS, city='tehran'):
         """
         Search divar.ir for a given term and return results
         """
         results = []
 
         try:
-            # Try with requests first (faster)
-            results = self._search_with_requests(search_term, max_results)
+            # Use Selenium directly (Divar uses JavaScript)
+            results = self._search_with_selenium(search_term, max_results, city)
+            print(f"Selenium scraping found {len(results)} results")
         except Exception as e:
-            print(f"Requests scraping failed: {e}")
+            print(f"Selenium scraping failed: {e}")
             try:
-                # Fallback to selenium if requests fails
-                results = self._search_with_selenium(search_term, max_results)
+                # Fallback to requests if Selenium fails
+                results = self._search_with_requests(search_term, max_results, city)
+                print(f"Requests scraping found {len(results)} results")
             except Exception as e2:
-                print(f"Selenium scraping also failed: {e2}")
+                print(f"Requests scraping also failed: {e2}")
                 return []
 
         return results[:max_results]
 
-    def _search_with_requests(self, search_term, max_results):
+    def _search_with_requests(self, search_term, max_results, city='tehran'):
         """
         Search using requests library
         """
-        search_url = f"{config.DIVAR_SEARCH_URL}?q={search_term}"
+        search_url = f"{config.DIVAR_BASE_URL}/s/{city}?q={search_term}"
 
         response = self.session.get(search_url, timeout=config.REQUEST_TIMEOUT)
         response.raise_for_status()
@@ -54,8 +56,14 @@ class DivarScraper:
         soup = BeautifulSoup(response.content, 'html.parser')
 
         results = []
-        # Find advertisement containers - adjust selectors based on actual divar.ir structure
-        ads = soup.find_all('div', class_=re.compile(r'post-card|kt-post-card'))
+        # Find advertisement containers - try different selectors
+        ads = soup.find_all('a', class_=re.compile(r'kt-post-card|post-card'))
+        if not ads:
+            # Fallback to div containers
+            ads = soup.find_all('div', class_=re.compile(r'post-card|kt-post-card'))
+            print(f"Using div selector, found {len(ads)} elements")
+        else:
+            print(f"Using link selector, found {len(ads)} elements")
 
         for ad in ads:
             if len(results) >= max_results:
@@ -67,7 +75,7 @@ class DivarScraper:
 
         return results
 
-    def _search_with_selenium(self, search_term, max_results):
+    def _search_with_selenium(self, search_term, max_results, city='tehran'):
         """
         Search using Selenium for dynamic content
         """
@@ -87,12 +95,12 @@ class DivarScraper:
         driver = webdriver.Chrome(ChromeDriverManager().install(), options=chrome_options)
 
         try:
-            search_url = f"{config.DIVAR_SEARCH_URL}?q={search_term}"
+            search_url = f"{config.DIVAR_BASE_URL}/s/{city}?q={search_term}"
             driver.get(search_url)
 
             # Wait for content to load
-            WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.CLASS_NAME, "post-card-item"))
+            WebDriverWait(driver, 15).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, 'a[href*="/v/"]'))
             )
 
             # Scroll to load more results
@@ -103,8 +111,8 @@ class DivarScraper:
             soup = BeautifulSoup(driver.page_source, 'html.parser')
             results = []
 
-            # Find advertisement containers
-            ads = soup.find_all('div', class_=re.compile(r'post-card|kt-post-card'))
+            # Find advertisement links
+            ads = soup.find_all('a', href=re.compile(r'/v/'))
 
             for ad in ads:
                 if len(results) >= max_results:
@@ -126,7 +134,11 @@ class DivarScraper:
         try:
             # Extract title/name
             title_elem = ad_element.find('h2') or ad_element.find(class_=re.compile(r'title|kt-post-card__title'))
-            title = title_elem.get_text(strip=True) if title_elem else "No Title"
+            title = title_elem.get_text(strip=True) if title_elem else ""
+
+            # Skip if no title
+            if not title or title.lower() in ['no title', 'بدون عنوان', '']:
+                return None
 
             # Extract description
             desc_elem = ad_element.find('p') or ad_element.find(class_=re.compile(r'description|kt-post-card__description'))
@@ -137,22 +149,32 @@ class DivarScraper:
             price = price_elem.get_text(strip=True) if price_elem else "No Price"
 
             # Extract link to get phone number
-            link_elem = ad_element.find('a', href=True)
-            phone_number = "Not Available"
-
-            if link_elem:
-                ad_url = link_elem['href']
+            if ad_element.name == 'a' and ad_element.get('href'):
+                # If ad_element is already a link
+                ad_url = ad_element['href']
                 if not ad_url.startswith('http'):
                     ad_url = config.DIVAR_BASE_URL + ad_url
-
                 phone_number = self._get_phone_number(ad_url)
+            else:
+                # Find link within the element
+                link_elem = ad_element.find('a', href=True)
+                phone_number = "در حال استخراج..."
+
+                ad_url = ""
+                if link_elem:
+                    ad_url = link_elem['href']
+                    if not ad_url.startswith('http'):
+                        ad_url = config.DIVAR_BASE_URL + ad_url
+
+                    # Try to get phone number immediately
+                    phone_number = self._get_phone_number(ad_url)
 
             return {
                 'title': title,
                 'description': description,
                 'price': price,
                 'phone_number': phone_number,
-                'url': ad_url if link_elem else ""
+                'url': ad_url
             }
 
         except Exception as e:
@@ -161,10 +183,49 @@ class DivarScraper:
 
     def _extract_ad_data_selenium(self, ad_element, driver):
         """
-        Extract data from a single advertisement element using Selenium
+        Extract data from a single advertisement link using Selenium
         """
-        # Similar to requests version but can handle dynamic content
-        return self._extract_ad_data_requests(ad_element)
+        try:
+            # ad_element is now a link <a>
+            ad_url = ad_element.get('href')
+            if not ad_url:
+                return None
+
+            if not ad_url.startswith('http'):
+                ad_url = config.DIVAR_BASE_URL + ad_url
+
+            # Extract title from link text
+            title = ad_element.get_text(strip=True)
+            if not title:
+                return None
+
+            # Get description and price from the element content
+            description = ""
+            price = "No Price"
+
+            # Try to get more details by clicking or parsing the element
+            try:
+                # Look for price in the element
+                price_elem = ad_element.find_next_sibling() or ad_element.find_parent().find(class_=re.compile(r'price|amount'))
+                if price_elem:
+                    price = price_elem.get_text(strip=True)
+            except:
+                pass
+
+            # Try to get phone number
+            phone_number = self._get_phone_number(ad_url)
+
+            return {
+                'title': title,
+                'description': description,
+                'price': price,
+                'phone_number': phone_number,
+                'url': ad_url
+            }
+
+        except Exception as e:
+            print(f"Error extracting Selenium ad data: {e}")
+            return None
 
     def _get_phone_number(self, ad_url):
         """
